@@ -39,22 +39,19 @@ class FormGenerator {
             if (fieldInfo.required && (value?.isEmpty ?? true)) {
               return "Please enter some text";
             }
-            if (fieldInfo.minLength != null && ((value?.length ?? 0) < fieldInfo.minLength!)) {
+            if (fieldInfo.minLength != null &&
+                ((value?.length ?? 0) < fieldInfo.minLength!)) {
               return "Please enter at least ${fieldInfo.minLength} characters";
             }
-            if (fieldInfo.maxLength != null && ((value?.length ?? 0) > fieldInfo.maxLength!)) {
+            if (fieldInfo.maxLength != null &&
+                ((value?.length ?? 0) > fieldInfo.maxLength!)) {
               return "Only ${fieldInfo.minLength} at-most characters allowed";
             }
             if (!RegExp(r'^[a-zA-Z]+$').hasMatch(value!)) {
               return "Only text allowed";
             }
-            for (var validation in fieldInfo.validations ?? []) {
-              if (!RegExp(validation.regex!).hasMatch(value)) {
-                return validation.errorMessage;
-              }
-            }
 
-            return null;
+            return _checkValidations(fieldInfo.validations ?? [], value);
           },
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^[a-zA-Z]+$')),
@@ -82,17 +79,42 @@ class FormGenerator {
             if (fieldInfo.min != null && (int.parse(value) < fieldInfo.min!)) {
               return "Provide value greater than ${fieldInfo.min}";
             }
-            return null;
+            return _checkValidations(fieldInfo.validations ?? [], value);
           },
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^[0-9]+$')),
           ],
         );
 
+      case FieldType.emailInput:
+        field = TextFormField(
+          decoration: InputDecoration(
+            labelText: fieldLabel,
+            hintText: fieldLabel,
+          ),
+          validator: (value) {
+            if (fieldInfo.required && (value?.isEmpty ?? true)) {
+              return "Please enter some text";
+            }
+            if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value!)) {
+              return "Please enter a valid email";
+            }
+            return _checkValidations(fieldInfo.validations ?? [], value);
+          },
+        );
       default:
         field = Text(fieldInfo.type.toString());
     }
 
     return field;
+  }
+
+  String? _checkValidations (List<ValidationRule> validation, String value) {
+    for (var validationRule in validation) {
+      if (!RegExp(validationRule.regex!).hasMatch(value)) {
+        return validationRule.errorMessage;
+      }
+    }
+    return null;
   }
 }
