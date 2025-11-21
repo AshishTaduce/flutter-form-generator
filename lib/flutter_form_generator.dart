@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'utils/common_utils.dart';
 
 import 'models/field_info.dart';
+import 'widgets/password_form_field.dart';
 
 class FormGenerator {
   Widget generateForm(Map<String, dynamic> formData) {
@@ -51,7 +53,7 @@ class FormGenerator {
               return "Only text allowed";
             }
 
-            return _checkValidations(fieldInfo.validations ?? [], value);
+            return checkValidations(fieldInfo.validations ?? [], value);
           },
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^[a-zA-Z]+$')),
@@ -79,7 +81,7 @@ class FormGenerator {
             if (fieldInfo.min != null && (int.parse(value) < fieldInfo.min!)) {
               return "Provide value greater than ${fieldInfo.min}";
             }
-            return _checkValidations(fieldInfo.validations ?? [], value);
+            return checkValidations(fieldInfo.validations ?? [], value);
           },
           inputFormatters: [
             FilteringTextInputFormatter.allow(RegExp(r'^[0-9]+$')),
@@ -99,9 +101,12 @@ class FormGenerator {
             if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value!)) {
               return "Please enter a valid email";
             }
-            return _checkValidations(fieldInfo.validations ?? [], value);
+            return checkValidations(fieldInfo.validations ?? [], value);
           },
         );
+
+      case FieldType.passwordInput:
+        field = PasswordFormField(fieldInfo: fieldInfo);
       default:
         field = Text(fieldInfo.type.toString());
     }
@@ -109,12 +114,4 @@ class FormGenerator {
     return field;
   }
 
-  String? _checkValidations (List<ValidationRule> validation, String value) {
-    for (var validationRule in validation) {
-      if (!RegExp(validationRule.regex!).hasMatch(value)) {
-        return validationRule.errorMessage;
-      }
-    }
-    return null;
-  }
 }
