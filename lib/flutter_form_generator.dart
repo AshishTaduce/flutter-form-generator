@@ -9,19 +9,18 @@ import 'widgets/password_form_field.dart';
 
 class FormGenerator {
   final Map<String, String>? headers;
-  final void Function(Map<String, dynamic> values)? onSuccess;
 
   late final ActionEngine _actionEngine;
   final Map<GlobalKey<FormState>, Map<String, dynamic>> _formValues = {};
 
-  FormGenerator({
-    this.headers,
-    this.onSuccess,
-  }) {
+  FormGenerator({this.headers}) {
     _actionEngine = ActionEngine(headers: headers);
   }
 
-  Widget generateForm(Map<String, dynamic> formData) {
+  Widget generateForm(
+    Map<String, dynamic> formData, {
+    required void Function(Map<String, dynamic> values) onSuccess,
+  }) {
     GlobalKey<FormState> formKey = GlobalKey<FormState>();
     _formValues[formKey] = {};
 
@@ -29,15 +28,17 @@ class FormGenerator {
       formKey: formKey,
       formData: formData,
       formGenerator: this,
+      onSuccess: onSuccess,
     );
   }
 
   void _handleSubmit(
-      GlobalKey<FormState> formKey,
-      Map<String, dynamic> formData,
-      BuildContext context,
-      Function(bool) setLoading,
-      ) async {
+    GlobalKey<FormState> formKey,
+    Map<String, dynamic> formData,
+    BuildContext context,
+    Function(bool) setLoading, {
+    required void Function(Map<String, dynamic> values)? onSuccess,
+  }) async {
     if (formKey.currentState?.validate() ?? false) {
       formKey.currentState?.save();
 
@@ -59,7 +60,7 @@ class FormGenerator {
 
         setLoading(false);
       } else {
-        print(_formValues[formKey]);
+        debugPrint(_formValues[formKey].toString());
         if (onSuccess != null) {
           onSuccess!(_formValues[formKey]!);
         }
@@ -94,9 +95,9 @@ class FormGenerator {
   }
 
   List<Widget> _generateFields(
-      List<FormFieldInfo> fieldsList,
-      GlobalKey<FormState> formKey,
-      ) {
+    List<FormFieldInfo> fieldsList,
+    GlobalKey<FormState> formKey,
+  ) {
     List<Widget> fields = [];
     for (var field in fieldsList) {
       fields.add(_generateField(field, formKey));
@@ -232,10 +233,12 @@ class FormGenerator {
           onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
           onChanged: (value) {},
           items: (fieldInfo.options ?? [])
-              .map((optionInfo) => DropdownMenuItem(
-            value: optionInfo.value,
-            child: Text(optionInfo.label),
-          ))
+              .map(
+                (optionInfo) => DropdownMenuItem(
+                  value: optionInfo.value,
+                  child: Text(optionInfo.label),
+                ),
+              )
               .toList(),
           validator: (value) {
             if (fieldInfo.required && (value == null || value.isEmpty)) {
@@ -243,7 +246,9 @@ class FormGenerator {
             }
 
             return checkValidations(
-                fieldInfo.validations ?? [], value?.toString() ?? '');
+              fieldInfo.validations ?? [],
+              value?.toString() ?? '',
+            );
           },
         );
 
@@ -265,11 +270,12 @@ class _FormGeneratorWidget extends StatefulWidget {
   final GlobalKey<FormState> formKey;
   final Map<String, dynamic> formData;
   final FormGenerator formGenerator;
-
+  final void Function(Map<String, dynamic> values) onSuccess;
   const _FormGeneratorWidget({
     required this.formKey,
     required this.formData,
     required this.formGenerator,
+    required this.onSuccess,
   });
 
   @override
@@ -310,22 +316,21 @@ class _FormGeneratorWidgetState extends State<_FormGeneratorWidget> {
                       onPressed: _isLoading
                           ? null
                           : () => widget.formGenerator._handleSubmit(
-                        widget.formKey,
-                        widget.formData,
-                        context,
-                        _setLoading,
-                      ),
+                              widget.formKey,
+                              widget.formData,
+                              context,
+                              _setLoading,
+                              onSuccess: widget.onSuccess,
+                            ),
                       child: _isLoading
                           ? SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                        ),
-                      )
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
                           : Text(
-                        widget.formData['submit']?['label'] ?? 'Submit',
-                      ),
+                              widget.formData['submit']?['label'] ?? 'Submit',
+                            ),
                     ),
                   ),
                 ),
@@ -336,9 +341,9 @@ class _FormGeneratorWidgetState extends State<_FormGeneratorWidget> {
                       onPressed: _isLoading
                           ? null
                           : () => widget.formGenerator._handleReset(
-                        widget.formKey,
-                        context,
-                      ),
+                              widget.formKey,
+                              context,
+                            ),
                       child: Text('Reset'),
                     ),
                   ),
