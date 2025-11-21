@@ -3,9 +3,12 @@ import 'package:flutter/services.dart';
 import 'utils/common_utils.dart';
 
 import 'models/field_info.dart';
+import 'widgets/checkbox_form_field.dart';
 import 'widgets/password_form_field.dart';
 
 class FormGenerator {
+
+
   Widget generateForm(Map<String, dynamic> formData) {
     return SingleChildScrollView(
       child: Column(
@@ -107,11 +110,65 @@ class FormGenerator {
 
       case FieldType.passwordInput:
         field = PasswordFormField(fieldInfo: fieldInfo);
+
+      case FieldType.textArea:
+        field = TextFormField(
+          decoration: InputDecoration(
+            labelText: fieldLabel,
+            hintText: fieldLabel,
+          ),
+          validator: (value) {
+            if (fieldInfo.required && (value?.isEmpty ?? true)) {
+              return "Please enter some text";
+            }
+            if (fieldInfo.minLength != null &&
+                ((value?.length ?? 0) < fieldInfo.minLength!)) {
+              return "Please enter at least ${fieldInfo.minLength} characters";
+            }
+            if (fieldInfo.maxLength != null &&
+                ((value?.length ?? 0) > fieldInfo.maxLength!)) {
+              return "Only ${fieldInfo.minLength} at-most characters allowed";
+            }
+
+            return checkValidations(fieldInfo.validations ?? [], value!);
+          },
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'^[a-zA-Z]+$')),
+          ],
+          maxLength: fieldInfo.maxLength,
+          maxLengthEnforcement: MaxLengthEnforcement.enforced,
+          maxLines: 5,
+          minLines: 3,
+        );
+
+      case FieldType.dropdown:
+        field = DropdownButtonFormField(
+          decoration: InputDecoration(
+            labelText: fieldLabel,
+            hintText: fieldLabel,
+          ),
+          onChanged: (value) {},
+          items: (fieldInfo.options ?? []).map((optionInfo) => DropdownMenuItem(
+            value: optionInfo.value,
+            child: Text(optionInfo.label),
+          )).toList(),
+          validator: (value) {
+            if (fieldInfo.required && (value?.isEmpty ?? true)) {
+              return "Please select an option";
+            }
+
+            return checkValidations(fieldInfo.validations ?? [], value!);
+          }
+        );
+
+      case FieldType.checkbox:
+        field = CheckboxFormField(fieldInfo: fieldInfo);
+
+
       default:
         field = Text(fieldInfo.type.toString());
     }
 
     return field;
   }
-
 }
