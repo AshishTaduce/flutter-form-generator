@@ -26,6 +26,7 @@ class CheckboxFormField extends FormField<bool> {
              ),
              value: state.value,
              onChanged: state.didChange,
+             isError: state.hasError,
              subtitle: state.hasError
                  ? Builder(
                      builder: (BuildContext context) => Text(
