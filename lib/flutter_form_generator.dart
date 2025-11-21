@@ -299,6 +299,13 @@ class _FormGeneratorWidgetState extends State<_FormGeneratorWidget> {
         child: Column(
           spacing: 16.0,
           children: [
+            Text(
+              widget.formData['title'] ?? '',
+              style: TextStyle(
+                fontSize: 24.0,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             ...widget.formGenerator._generateFields(
               (widget.formData['fields'] as List)
                   .map((field) => FormFieldInfo.fromJson(field))
@@ -334,6 +341,7 @@ class _FormGeneratorWidgetState extends State<_FormGeneratorWidget> {
                     ),
                   ),
                 ),
+                if (widget.formData["reset"] != null)
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
