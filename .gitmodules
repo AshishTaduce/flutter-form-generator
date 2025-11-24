@@ -1,3 +1,6 @@
 [submodule "flutter_form_example"]
 	path = example
 	url = https://github.com/AshishTaduce/flutter_form_example.git
+[submodule "flutter_form_builder"]
+	path = flutter_form_builder
+	url = https://github.com/AshishTaduce/flutter_form_builder.git

@@ -7,13 +7,13 @@ class ActionEngine {
   final Map<String, String> headers;
 
   ActionEngine({Map<String, String>? headers})
-    : headers = headers ?? {},
-      _dio = Dio(
-        BaseOptions(
-          headers: headers ?? {'Content-Type': 'application/json'},
-          validateStatus: (status) => status != null && status < 500,
-        ),
-      );
+      : headers = headers ?? {},
+        _dio = Dio(
+          BaseOptions(
+            headers: headers ?? {'Content-Type': 'application/json'},
+            validateStatus: (status) => status != null && status < 500,
+          ),
+        );
 
   Future<void> executeAction({
     required Map<String, dynamic> action,
@@ -68,7 +68,7 @@ class ActionEngine {
 
       switch (method) {
         case 'GET':
-          response = await _dio.get(url);
+          response = await _dio.get(url, queryParameters: formValues);
           break;
         case 'POST':
           response = await _dio.post(url, data: formValues);
@@ -96,15 +96,51 @@ class ActionEngine {
           response.statusCode! < 300) {
         _showMessage(context: context, message: successMessage, isError: false);
         onSuccess?.call();
+
+        // Chaining: onSuccess action
+        if (action['onSuccess'] != null) {
+          await executeAction(
+            action: action['onSuccess'],
+            context: context,
+            formValues: formValues,
+          );
+        }
       } else {
         _showMessage(context: context, message: errorMessage, isError: true);
+        
+        // Chaining: onError action
+        if (action['onError'] != null) {
+          await executeAction(
+            action: action['onError'],
+            context: context,
+            formValues: formValues,
+          );
+        }
       }
     } on DioException catch (e) {
       print('API Error: ${e.message}');
       _showMessage(context: context, message: errorMessage, isError: true);
+      
+      // Chaining: onError action
+      if (action['onError'] != null) {
+        await executeAction(
+          action: action['onError'],
+          context: context,
+          formValues: formValues,
+        );
+      }
     } catch (e) {
       print('Unexpected Error: $e');
       _showMessage(context: context, message: errorMessage, isError: true);
+      
+      // Chaining: onError action
+      if (action['onError'] != null) {
+        await executeAction(
+          action: action['onError'],
+          context: context,
+          formValues: formValues,
+        );
+      }
     }
   }
 

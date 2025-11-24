@@ -1,74 +1,95 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'utils/action_engine.dart';
-import 'utils/common_utils.dart';
-
+import 'utils/form_controller.dart';
 import 'models/field_info.dart';
-import 'widgets/checkbox_form_field.dart';
-import 'widgets/password_form_field.dart';
+import 'widgets/field_factory.dart';
 
-class FormGenerator {
+export 'models/field_info.dart' show FieldType;
+
+class FormGenerator extends StatefulWidget {
+  final Map<String, dynamic> formData;
+  final void Function(Map<String, dynamic> values) onSuccess;
   final Map<String, String>? headers;
+  final Map<String, dynamic>? initialValues;
 
+  const FormGenerator({
+    super.key,
+    required this.formData,
+    required this.onSuccess,
+    this.headers,
+    this.initialValues,
+  });
+
+  @override
+  State<FormGenerator> createState() => _FormGeneratorState();
+}
+
+class _FormGeneratorState extends State<FormGenerator> {
   late final ActionEngine _actionEngine;
-  final Map<GlobalKey<FormState>, Map<String, dynamic>> _formValues = {};
+  late final FormController _formController;
+  bool _isLoading = false;
 
-  FormGenerator({this.headers}) {
-    _actionEngine = ActionEngine(headers: headers);
+  @override
+  void initState() {
+    super.initState();
+    _actionEngine = ActionEngine(headers: widget.headers);
+    _formController = FormController(initialValues: widget.initialValues);
+    _initializeFields();
   }
 
-  Widget generateForm(
-    Map<String, dynamic> formData, {
-    required void Function(Map<String, dynamic> values) onSuccess,
-  }) {
-    GlobalKey<FormState> formKey = GlobalKey<FormState>();
-    _formValues[formKey] = {};
-
-    return _FormGeneratorWidget(
-      formKey: formKey,
-      formData: formData,
-      formGenerator: this,
-      onSuccess: onSuccess,
-    );
-  }
-
-  void _handleSubmit(
-    GlobalKey<FormState> formKey,
-    Map<String, dynamic> formData,
-    BuildContext context,
-    Function(bool) setLoading, {
-    required void Function(Map<String, dynamic> values)? onSuccess,
-  }) async {
-    if (formKey.currentState?.validate() ?? false) {
-      formKey.currentState?.save();
-
-      final submitAction = formData['submit']?['action'];
-
-      if (submitAction != null) {
-        setLoading(true);
-
-        await _actionEngine.executeAction(
-          action: submitAction,
-          context: context,
-          formValues: _formValues[formKey],
-          onSuccess: () {
-            if (onSuccess != null) {
-              onSuccess!(_formValues[formKey]!);
-            }
-          },
-        );
-
-        setLoading(false);
-      } else {
-        debugPrint(_formValues[formKey].toString());
-        if (onSuccess != null) {
-          onSuccess!(_formValues[formKey]!);
+  void _initializeFields() {
+    final fieldsData = widget.formData['fields'] as List;
+    for (var row in fieldsData) {
+      if (row is List) {
+        for (var fieldData in row) {
+          _formController.registerField(FormFieldInfo.fromJson(fieldData));
         }
+      } else {
+        _formController.registerField(FormFieldInfo.fromJson(row));
       }
     }
   }
 
-  void _handleReset(GlobalKey<FormState> formKey, BuildContext context) {
+  @override
+  void dispose() {
+    _formController.dispose();
+    super.dispose();
+  }
+
+  void _setLoading(bool loading) {
+    setState(() {
+      _isLoading = loading;
+    });
+  }
+
+  void _handleSubmit() async {
+    if (_formController.validate()) {
+      _formController.save();
+      final submitValues = _formController.getSubmitValues();
+
+      final submitAction = widget.formData['submit']?['action'];
+
+      if (submitAction != null) {
+        _setLoading(true);
+
+        await _actionEngine.executeAction(
+          action: submitAction,
+          context: context,
+          formValues: submitValues,
+          onSuccess: () {
+            widget.onSuccess(submitValues);
+          },
+        );
+
+        _setLoading(false);
+      } else {
+        debugPrint(submitValues.toString());
+        widget.onSuccess(submitValues);
+      }
+    }
+  }
+
+  void _handleReset() {
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -82,8 +103,7 @@ class FormGenerator {
             ),
             TextButton(
               onPressed: () {
-                formKey.currentState?.reset();
-                _formValues[formKey]?.clear();
+                _formController.reset();
                 Navigator.of(dialogContext).pop();
               },
               child: Text('Reset'),
@@ -94,271 +114,125 @@ class FormGenerator {
     );
   }
 
-  List<Widget> _generateFields(
-    List<FormFieldInfo> fieldsList,
-    GlobalKey<FormState> formKey,
-  ) {
-    List<Widget> fields = [];
-    for (var field in fieldsList) {
-      fields.add(_generateField(field, formKey));
-    }
-    return fields;
-  }
-
-  Widget _generateField(FormFieldInfo fieldInfo, GlobalKey<FormState> formKey) {
-    late Widget field;
-    String fieldLabel = fieldInfo.label;
-
-    switch (fieldInfo.type) {
-      case FieldType.textInput:
-        field = TextFormField(
-          decoration: InputDecoration(
-            labelText: fieldLabel,
-            hintText: fieldLabel,
-          ),
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-          validator: (value) {
-            if (fieldInfo.required && (value?.isEmpty ?? true)) {
-              return "Please enter some text";
-            }
-            if (fieldInfo.minLength != null &&
-                ((value?.length ?? 0) < fieldInfo.minLength!)) {
-              return "Please enter at least ${fieldInfo.minLength} characters";
-            }
-            if (fieldInfo.maxLength != null &&
-                ((value?.length ?? 0) > fieldInfo.maxLength!)) {
-              return "Only ${fieldInfo.maxLength} at-most characters allowed";
-            }
-            if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value!)) {
-              return "Only text allowed";
-            }
-
-            return checkValidations(fieldInfo.validations ?? [], value);
-          },
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^[a-zA-Z\s]+$')),
-          ],
-          maxLength: fieldInfo.maxLength,
-          maxLengthEnforcement: MaxLengthEnforcement.enforced,
-        );
-
-      case FieldType.numberInput:
-        field = TextFormField(
-          decoration: InputDecoration(
-            labelText: fieldLabel,
-            hintText: fieldLabel,
-          ),
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-          validator: (value) {
-            if (fieldInfo.required && (value?.isEmpty ?? true)) {
-              return "Please enter some text";
-            }
-            if (!RegExp(r'^[0-9]+$').hasMatch(value!)) {
-              return "Only numbers allowed";
-            }
-            if (fieldInfo.max != null && (num.parse(value) > fieldInfo.max!)) {
-              return "Provide value lesser than ${fieldInfo.max}";
-            }
-            if (fieldInfo.min != null && (int.parse(value) < fieldInfo.min!)) {
-              return "Provide value greater than ${fieldInfo.min}";
-            }
-            return checkValidations(fieldInfo.validations ?? [], value);
-          },
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^[0-9]+$')),
-          ],
-        );
-
-      case FieldType.emailInput:
-        field = TextFormField(
-          decoration: InputDecoration(
-            labelText: fieldLabel,
-            hintText: fieldLabel,
-          ),
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-          validator: (value) {
-            if (fieldInfo.required && (value?.isEmpty ?? true)) {
-              return "Please enter some text";
-            }
-            if (!RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value!)) {
-              return "Please enter a valid email";
-            }
-            return checkValidations(fieldInfo.validations ?? [], value);
-          },
-        );
-
-      case FieldType.passwordInput:
-        field = PasswordFormField(
-          fieldInfo: fieldInfo,
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-        );
-
-      case FieldType.textArea:
-        field = TextFormField(
-          decoration: InputDecoration(
-            labelText: fieldLabel,
-            hintText: fieldLabel,
-          ),
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-          validator: (value) {
-            if (fieldInfo.required && (value?.isEmpty ?? true)) {
-              return "Please enter some text";
-            }
-            if (fieldInfo.minLength != null &&
-                ((value?.length ?? 0) < fieldInfo.minLength!)) {
-              return "Please enter at least ${fieldInfo.minLength} characters";
-            }
-            if (fieldInfo.maxLength != null &&
-                ((value?.length ?? 0) > fieldInfo.maxLength!)) {
-              return "Only ${fieldInfo.maxLength} at-most characters allowed";
-            }
-
-            return checkValidations(fieldInfo.validations ?? [], value!);
-          },
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'^[a-zA-Z\s]+$')),
-          ],
-          maxLength: fieldInfo.maxLength,
-          maxLengthEnforcement: MaxLengthEnforcement.enforced,
-          maxLines: 5,
-          minLines: 3,
-        );
-
-      case FieldType.dropdown:
-        field = DropdownButtonFormField(
-          decoration: InputDecoration(
-            labelText: fieldLabel,
-            hintText: fieldLabel,
-          ),
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-          onChanged: (value) {},
-          items: (fieldInfo.options ?? [])
-              .map(
-                (optionInfo) => DropdownMenuItem(
-                  value: optionInfo.value,
-                  child: Text(optionInfo.label),
+  List<Widget> _generateRows(List<dynamic> fieldsData) {
+    List<Widget> rows = [];
+    for (var rowData in fieldsData) {
+      if (rowData is List) {
+        // Multi-column row
+        rows.add(
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rowData.map((fieldData) {
+              final fieldInfo = FormFieldInfo.fromJson(fieldData);
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                  child: FieldWidgetFactory.create(fieldInfo, _formController),
                 ),
-              )
-              .toList(),
-          validator: (value) {
-            if (fieldInfo.required && (value == null || value.isEmpty)) {
-              return "Please select an option";
-            }
-
-            return checkValidations(
-              fieldInfo.validations ?? [],
-              value?.toString() ?? '',
-            );
-          },
+              );
+            }).toList(),
+          ),
         );
-
-      case FieldType.checkbox:
-        field = CheckboxFormField(
-          fieldInfo: fieldInfo,
-          onSaved: (value) => _formValues[formKey]![fieldInfo.name] = value,
-        );
-
-      default:
-        field = Text(fieldInfo.type.toString());
+      } else {
+        // Single column row
+        final fieldInfo = FormFieldInfo.fromJson(rowData);
+        rows.add(FieldWidgetFactory.create(fieldInfo, _formController));
+      }
     }
-
-    return field;
+    return rows;
   }
-}
 
-class _FormGeneratorWidget extends StatefulWidget {
-  final GlobalKey<FormState> formKey;
-  final Map<String, dynamic> formData;
-  final FormGenerator formGenerator;
-  final void Function(Map<String, dynamic> values) onSuccess;
-  const _FormGeneratorWidget({
-    required this.formKey,
-    required this.formData,
-    required this.formGenerator,
-    required this.onSuccess,
-  });
-
-  @override
-  State<_FormGeneratorWidget> createState() => _FormGeneratorWidgetState();
-}
-
-class _FormGeneratorWidgetState extends State<_FormGeneratorWidget> {
-  bool _isLoading = false;
-
-  void _setLoading(bool loading) {
-    setState(() {
-      _isLoading = loading;
-    });
+  Future<bool> _showExitConfirmation() async {
+    final exitMsg =
+        widget.formData['exit_message'] ??
+        'You have unsaved changes. Are you sure you want to exit?';
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Unsaved Changes'),
+            content: Text(exitMsg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Exit', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Form(
-      key: widget.formKey,
-      child: SingleChildScrollView(
-        child: Column(
-          spacing: 16.0,
-          children: [
-            Text(
-              widget.formData['title'] ?? '',
-              style: TextStyle(
-                fontSize: 24.0,
-                fontWeight: FontWeight.bold,
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) async {
+        if (didPop) return;
+        if (_formController.isDirty) {
+          final shouldPop = await _showExitConfirmation();
+          if (shouldPop && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Form(
+        key: _formController.formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            spacing: 16.0,
+            children: [
+              if (widget.formData['title'] != null)
+                Text(
+                  widget.formData['title'],
+                  style: const TextStyle(
+                    fontSize: 24.0,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ..._generateRows(widget.formData['fields'] as List),
+              const SizedBox(height: 8.0),
+              Row(
+                spacing: 16.0,
+                children: [
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _handleSubmit,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                widget.formData['submit']?['label'] ?? 'Submit',
+                              ),
+                      ),
+                    ),
+                  ),
+                  if (widget.formData["reset"] == true)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: OutlinedButton(
+                          onPressed: _isLoading ? null : _handleReset,
+                          child: const Text('Reset'),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-            ),
-            ...widget.formGenerator._generateFields(
-              (widget.formData['fields'] as List)
-                  .map((field) => FormFieldInfo.fromJson(field))
-                  .toList(),
-              widget.formKey,
-            ),
-            SizedBox(height: 8.0),
-            Row(
-              spacing: 16.0,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: ElevatedButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => widget.formGenerator._handleSubmit(
-                              widget.formKey,
-                              widget.formData,
-                              context,
-                              _setLoading,
-                              onSuccess: widget.onSuccess,
-                            ),
-                      child: _isLoading
-                          ? SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : Text(
-                              widget.formData['submit']?['label'] ?? 'Submit',
-                            ),
-                    ),
-                  ),
-                ),
-                if (widget.formData["reset"] != null)
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: OutlinedButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () => widget.formGenerator._handleReset(
-                              widget.formKey,
-                              context,
-                            ),
-                      child: Text('Reset'),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

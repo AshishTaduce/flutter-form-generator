@@ -3,6 +3,8 @@ class FormFieldInfo {
   final String name;
   final String label;
   final String? placeholder;
+  final String? hint;
+  final String? tooltip;
   final bool required;
   final int? maxLength;
   final int? minLength;
@@ -10,13 +12,17 @@ class FormFieldInfo {
   final num? max;
   final List<ValidationRule>? validations;
   final List<DropdownOption>? options;
-  final String? defaultValue;
+  final dynamic defaultValue;
+  final bool isSearchable;
+  final DependencyRule? enabledIf;
 
   FormFieldInfo({
     required this.type,
     required this.name,
     required this.label,
     this.placeholder,
+    this.hint,
+    this.tooltip,
     this.required = false,
     this.maxLength,
     this.minLength,
@@ -25,6 +31,8 @@ class FormFieldInfo {
     this.validations,
     this.options,
     this.defaultValue,
+    this.isSearchable = false,
+    this.enabledIf,
   });
 
   factory FormFieldInfo.fromJson(Map<String, dynamic> json) {
@@ -33,6 +41,8 @@ class FormFieldInfo {
       name: json['name'] as String,
       label: json['label'] as String,
       placeholder: json['placeholder'] as String?,
+      hint: json['hint'] as String?,
+      tooltip: json['tooltip'] as String?,
       required: json['required'] as bool? ?? false,
       maxLength: json['maxLength'] as int?,
       minLength: json['minLength'] as int?,
@@ -49,6 +59,10 @@ class FormFieldInfo {
                 .toList()
           : null,
       defaultValue: json['defaultValue'],
+      isSearchable: json['isSearchable'] as bool? ?? false,
+      enabledIf: json['enabledIf'] != null
+          ? DependencyRule.fromJson(json['enabledIf'])
+          : null,
     );
   }
 
@@ -58,14 +72,21 @@ class FormFieldInfo {
       'name': name,
       'label': label,
       if (placeholder != null) 'placeholder': placeholder,
+      if (hint != null) 'hint': hint,
+      if (tooltip != null) 'tooltip': tooltip,
       'required': required,
       if (maxLength != null) 'maxLength': maxLength,
       if (minLength != null) 'minLength': minLength,
       if (min != null) 'min': min,
       if (max != null) 'max': max,
-      if (validations != null) 'validations': validations?.map((validation) => validation.toJson()).toList(),
+      if (validations != null)
+        'validations': validations
+            ?.map((validation) => validation.toJson())
+            .toList(),
       if (options != null) 'options': options!.map((o) => o.toJson()).toList(),
       if (defaultValue != null) 'defaultValue': defaultValue,
+      'isSearchable': isSearchable,
+      if (enabledIf != null) 'enabledIf': enabledIf!.toJson(),
     };
   }
 }
@@ -174,10 +195,7 @@ class ValidationRule {
   final String? regex;
   final String? errorMessage;
 
-  ValidationRule({
-    this.regex,
-    this.errorMessage,
-  });
+  ValidationRule({this.regex, this.errorMessage});
 
   factory ValidationRule.fromJson(Map<String, dynamic> json) {
     return ValidationRule(
@@ -210,5 +228,29 @@ class DropdownOption {
 
   Map<String, dynamic> toJson() {
     return {'label': label, 'value': value};
+  }
+}
+
+class DependencyRule {
+  final String field;
+  final String operator;
+  final dynamic value;
+
+  DependencyRule({
+    required this.field,
+    required this.operator,
+    required this.value,
+  });
+
+  factory DependencyRule.fromJson(Map<String, dynamic> json) {
+    return DependencyRule(
+      field: json['field'] as String,
+      operator: json['operator'] as String,
+      value: json['value'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'field': field, 'operator': operator, 'value': value};
   }
 }
